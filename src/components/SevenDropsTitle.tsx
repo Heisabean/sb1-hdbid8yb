@@ -113,7 +113,11 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
         posRef.current.y = 0;
         velocityRef.current.vy = -velocityRef.current.vy * bounceFactor;
       }
+      // 바닥 충돌 시 효과음 추가
       if (posRef.current.y + charHeight > window.innerHeight) {
+        if (Math.abs(velocityRef.current.vy) > 100) {
+          SOUNDS.land.play().catch((err) => console.warn(err));
+        }
         posRef.current.y = window.innerHeight - charHeight;
         velocityRef.current.vy = -velocityRef.current.vy * bounceFactor;
       }
@@ -141,7 +145,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
             }
           }
 
-          // 일정 속도 이상이면 착지 효과음 재생
+          // 일정 속도 이상이면 착지 효과음 재생 (장애물과의 충돌 시)
           if (Math.abs(velocityRef.current.vy) > 100) {
             SOUNDS.land.play().catch((err) => console.warn(err));
           }
@@ -174,8 +178,27 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
             : PHYSICS_PARAMS.ground;
 
           if (minOverlap === overlapTop) {
+            // 만약 장애물이 글자라면, 현재 적용된 translateY 값을 보정값(letterOffsetY)로 반영
+            let letterOffsetY = 0;
+            if (isLetterObstacle) {
+              const computedStyle = window.getComputedStyle(obstacle);
+              const transform = computedStyle.transform;
+              if (transform && transform !== "none") {
+                try {
+                  const matrix = new DOMMatrix(transform);
+                  letterOffsetY = matrix.m42;
+                } catch (e) {
+                  // DOMMatrix 생성에 실패하면 클래스 이름으로 판단 (translate-y-2: 약 8px)
+                  if (obstacle.classList.contains("translate-y-2")) {
+                    letterOffsetY = 8;
+                  }
+                }
+              } else if (obstacle.classList.contains("translate-y-2")) {
+                letterOffsetY = 8;
+              }
+            }
             if (Math.abs(velocityRef.current.vy) < params.landingThreshold) {
-              posRef.current.y = obsRect.top - charHeight;
+              posRef.current.y = obsRect.top - charHeight + letterOffsetY;
               velocityRef.current.vy = 0;
               velocityRef.current.vx *= params.friction;
               if (
@@ -713,6 +736,7 @@ const SevenDropsTitle = () => {
             onMouseEnter={() => {
               setHoveredButton(index);
               setParallaxOffset({ x: 10, y: 10 });
+              playSound(SOUNDS.hover);
             }}
             onMouseLeave={() => {
               setHoveredButton(null);

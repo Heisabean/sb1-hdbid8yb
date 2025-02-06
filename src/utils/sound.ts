@@ -1,9 +1,9 @@
 // sound.ts
-import calmPuzzle from '../assets/sounds/music/calm-puzzle.mp3';
-import softLand from '../assets/sounds/effects/soft-land.mp3';
-import pieceHit from '../assets/sounds/effects/piece-hit.mp3';
-import menuHover from '../assets/sounds/effects/menu-hover.mp3';
-import menuSelect from '../assets/sounds/effects/menu-select.mp3';
+import calmPuzzle from '/src/assets/sounds/music/calm-puzzle.mp3';
+import softLand from '/src/assets/sounds/effects/soft-land.mp3';
+import pieceHit from '/src/assets/sounds/effects/piece-hit.mp3';
+import menuHover from '/src/assets/sounds/effects/menu-hover.mp3';
+import menuSelect from '/src/assets/sounds/effects/menu-select.mp3';
 
 export const SOUNDS = {
   land: new Audio(softLand),
