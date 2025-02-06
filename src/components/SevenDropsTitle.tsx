@@ -5,7 +5,6 @@ import React, {
   useCallback,
 } from "react";
 import { Play, Trophy, LogOut, Volume2, VolumeX } from "lucide-react";
-// SOUNDS 관련 import 수정
 import { SOUNDS, initializeSounds, playSound } from "../utils/sound";
 
 /**
@@ -72,24 +71,16 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
       `[data-menu-item="${button}"]`
     );
     if (isCollidingFlag) {
-      // 버튼과 충돌 중이면 hover 효과 적용 및 효과음 재생
-      SOUNDS.hover.play().catch((err) => console.warn(err));
+      // 이전에 충돌하지 않았을 때만 효과음 재생
+      if (!lastCollidedButton.current) {
+        SOUNDS.hover.play().catch((err) => console.warn(err));
+      }
       buttonElement?.classList.add("scale-110", "ring-4", "ring-white/50");
       if (onButtonActivate) onButtonActivate(button);
     } else {
       buttonElement?.classList.remove("scale-110", "ring-4", "ring-white/50");
     }
   }, [onButtonActivate]);
-
-  /**
-   * Tangram 조각 충돌 시 흔들림 및 빛나는 효과 적용
-   */
-  const handlePieceCollision = useCallback((piece) => {
-    piece.classList.add("shake-piece", "glow-piece");
-    setTimeout(() => {
-      piece.classList.remove("shake-piece", "glow-piece");
-    }, 500);
-  }, []);
 
   /**
    * 물리 시뮬레이션 – 중력 적용, 위치 업데이트, 충돌 처리
@@ -137,8 +128,11 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
         if (isColliding(charRect, obsRect)) {
           // 버튼과 충돌한 경우
           if (obstacle.dataset.menuItem) {
-            handleCollisionWithButton(obstacle.dataset.menuItem, true);
-            lastCollidedButton.current = obstacle.dataset.menuItem;
+            const buttonName = obstacle.dataset.menuItem;
+            if (buttonName !== lastCollidedButton.current) {
+              handleCollisionWithButton(buttonName, true);
+              lastCollidedButton.current = buttonName;
+            }
           } else {
             // 이전에 충돌했던 버튼이 있었다면 효과 제거
             if (lastCollidedButton.current) {
@@ -155,7 +149,10 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
           // 버튼이 아닌 경우(예, 글자나 탱그램 조각)도 흔들림 효과 적용
           if (!obstacle.dataset.menuItem) {
             if (obstacle.tagName === "DIV") {
-              handlePieceCollision(obstacle);
+              obstacle.classList.add("shake-piece", "glow-piece");
+              setTimeout(() => {
+                obstacle.classList.remove("shake-piece", "glow-piece");
+              }, 500);
             }
           }
 
@@ -208,8 +205,11 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
                 : -velocityRef.current.vx * params.bounceFactor;
           }
         } else {
-          // 충돌이 끝났다면, 이전에 적용된 버튼 효과 제거
-          if (lastCollidedButton.current) {
+          // 해당 장애물과 충돌이 끝났을 때 (버튼이면 효과 제거)
+          if (
+            obstacle.dataset.menuItem &&
+            obstacle.dataset.menuItem === lastCollidedButton.current
+          ) {
             handleCollisionWithButton(lastCollidedButton.current, false);
             lastCollidedButton.current = null;
           }
@@ -485,14 +485,15 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
 };
 
 /**
- * TitleLetter 컴포넌트
+ * TitleLetter 컴포넌트 (forwardRef 적용)
  *
  * - 타이틀 글자를 렌더링하며, 캐릭터와 충돌 시 글자가 살짝 내려갑니다.
- * - 캐릭터의 위치가 변경될 때마다 "characterMove" 이벤트를 구독하여 충돌 여부를 판단합니다.
+ * - 내부 ref 또는 전달받은 ref를 사용하여 충돌 여부를 판단합니다.
  */
-const TitleLetter = ({ children, color }) => {
+const TitleLetter = React.forwardRef(({ children, color }, ref) => {
   const [isPressed, setIsPressed] = useState(false);
-  const letterRef = useRef(null);
+  const innerRef = useRef(null);
+  const letterRef = ref || innerRef;
 
   useEffect(() => {
     const checkCollision = (charRect) => {
@@ -517,19 +518,19 @@ const TitleLetter = ({ children, color }) => {
     window.addEventListener("characterMove", handleCharacterMove);
     return () =>
       window.removeEventListener("characterMove", handleCharacterMove);
-  }, []);
+  }, [letterRef]);
 
   return (
     <span
       ref={letterRef}
       className={`obstacle text-${color}-400 transition-all duration-300 text-6xl relative leading-none inline-block ${
-        isPressed ? "transform translate-y-1" : ""
+        isPressed ? "transform translate-y-2" : ""
       }`}
     >
       {children}
     </span>
   );
-};
+});
 
 /**
  * SoundControl 컴포넌트
@@ -570,11 +571,10 @@ const SoundControl = () => {
 const SevenDropsTitle = () => {
   const [hoveredButton, setHoveredButton] = useState(null);
   const [characterInitialPos, setCharacterInitialPos] = useState(null);
-  // 버튼 위에 있을 때 적용할 parallax offset 상태
   const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
   const letterSRef = useRef(null);
 
-  // Tangram 조각 정보 (7개로 확장)
+  // Tangram 조각 정보 (7개)
   const tangramPieces = [
     {
       color: "bg-cyan-500",
@@ -621,7 +621,7 @@ const SevenDropsTitle = () => {
       },
     },
     {
-      color: "bg-pink-500", // 새로운 조각 추가
+      color: "bg-pink-500",
       style: {
         width: "4rem",
         height: "4rem",
@@ -664,7 +664,7 @@ const SevenDropsTitle = () => {
 
   return (
     <div className="h-screen w-full bg-gray-900 flex flex-col items-center justify-center relative overflow-hidden">
-      {/* 떠다니는 Tangram 조각 (버튼 위에 커서가 있을 때 parallax offset 적용) */}
+      {/* 떠다니는 Tangram 조각 */}
       {tangramPieces.map((piece, index) => (
         <div
           key={index}
@@ -690,9 +690,7 @@ const SevenDropsTitle = () => {
           <TitleLetter color="purple">R</TitleLetter>
           <TitleLetter color="green">O</TitleLetter>
           <TitleLetter color="red">P</TitleLetter>
-          <TitleLetter color="blue" ref={letterSRef}>
-            S
-          </TitleLetter>
+          <TitleLetter ref={letterSRef} color="blue">S</TitleLetter>
         </h1>
         <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 via-purple-500 to-blue-500 rounded-1g blur opacity-10" />
       </div>
@@ -714,7 +712,6 @@ const SevenDropsTitle = () => {
                         shadow-lg hover:shadow-${btn.color}-500/50`}
             onMouseEnter={() => {
               setHoveredButton(index);
-              // 버튼 위에 있을 때 parallax offset 적용 (예시)
               setParallaxOffset({ x: 10, y: 10 });
             }}
             onMouseLeave={() => {
