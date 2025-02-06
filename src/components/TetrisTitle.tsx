@@ -17,8 +17,8 @@ function isColliding(rect1, rect2) {
  * DraggableCharacter 컴포넌트
  *
  * - 초기 위치에서 시작하며, 드래그 후 손을 놓으면 중력의 영향을 받습니다.
- * - 화면 경계와 .obstacle 클래스를 가진 요소에 충돌하면 튕깁니다.
- * - 수직 속도가 낮은 상태에서 장애물 위에 착지하면 마찰을 적용하여 자연스럽게 멈춥니다.
+ * - 화면 경계와 .obstacle 클래스를 가진 요소(여기서는 Tangram 조각)에 충돌하면 튕깁니다.
+ * - 수직 속도가 낮은 상태에서 조각 위에 착지하면 마찰을 적용하여 자연스럽게 멈춥니다.
  * - 클릭(드래그 중이 아닐 때)하면 위로 점프하는 힘이 가해집니다.
  */
 const DraggableCharacter = ({ initialPos }) => {
@@ -44,7 +44,7 @@ const DraggableCharacter = ({ initialPos }) => {
     EYE_Y: 0.4,
     LEFT_PUPIL_OFFSET: 0.926524,
     RIGHT_PUPIL_OFFSET: 0.879059,
-    MAX_PUPIL_OFFSET: 2
+    MAX_PUPIL_OFFSET: 2,
   };
 
   // 충돌 시 물리 파라미터
@@ -52,13 +52,13 @@ const DraggableCharacter = ({ initialPos }) => {
     ground: {
       bounceFactor: 0.7,
       friction: 0.95,
-      landingThreshold: 150
+      landingThreshold: 150,
     },
     obstacle: {
-      bounceFactor: 0.7,    // 글자 위에서는 덜 튀게
-      friction: 0.98,       // 글자 위에서는 더 잘 멈추게
-      landingThreshold: 200 // 쉽게 착지하도록
-    }
+      bounceFactor: 0.7, // 조각 위에서는 덜 튀게
+      friction: 0.98, // 조각 위에서는 더 잘 멈추게
+      landingThreshold: 200, // 쉽게 착지하도록
+    },
   };
 
   // 물리 시뮬레이션 상수
@@ -97,7 +97,8 @@ const DraggableCharacter = ({ initialPos }) => {
 
     const charElem = characterRef.current;
     if (charElem) {
-      const { width: charWidth, height: charHeight } = charElem.getBoundingClientRect();
+      const { width: charWidth, height: charHeight } =
+        charElem.getBoundingClientRect();
 
       // 화면 경계 충돌 처리
       if (posRef.current.x < 0) {
@@ -117,7 +118,7 @@ const DraggableCharacter = ({ initialPos }) => {
         velocityRef.current.vy = -velocityRef.current.vy * bounceFactor;
       }
 
-      // 장애물 충돌 처리 (모든 .obstacle 요소와 충돌 검사)
+      // Tangram 조각(모든 .obstacle 요소)과 충돌 처리
       const obstacles = document.querySelectorAll('.obstacle');
       obstacles.forEach((obstacle) => {
         if (obstacle === charElem) return;
@@ -125,29 +126,40 @@ const DraggableCharacter = ({ initialPos }) => {
         const charRect = charElem.getBoundingClientRect();
         if (isColliding(charRect, obsRect)) {
           const isLetterObstacle = obstacle.textContent.length === 1;
-          const params = isLetterObstacle ? PHYSICS_PARAMS.obstacle : PHYSICS_PARAMS.ground;
+          const params = isLetterObstacle
+            ? PHYSICS_PARAMS.obstacle
+            : PHYSICS_PARAMS.ground;
           const overlapLeft = charRect.right - obsRect.left;
           const overlapRight = obsRect.right - charRect.left;
           const overlapTop = charRect.bottom - obsRect.top;
           const overlapBottom = obsRect.bottom - charRect.top;
-          const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+          const minOverlap = Math.min(
+            overlapLeft,
+            overlapRight,
+            overlapTop,
+            overlapBottom
+          );
 
           if (minOverlap === overlapTop) {
-            // 캐릭터가 장애물 위에 착지하는 경우
+            // 캐릭터가 조각 위에 착지하는 경우
             if (Math.abs(velocityRef.current.vy) < params.landingThreshold) {
               posRef.current.y = obsRect.top - charHeight;
               velocityRef.current.vy = 0;
               velocityRef.current.vx *= params.friction;
-              if (Math.abs(velocityRef.current.vx) < (isLetterObstacle ? 2 : 5)) {
+              if (
+                Math.abs(velocityRef.current.vx) < (isLetterObstacle ? 2 : 5)
+              ) {
                 velocityRef.current.vx = 0;
               }
             } else {
               posRef.current.y -= minOverlap;
-              velocityRef.current.vy = -velocityRef.current.vy * params.bounceFactor;
+              velocityRef.current.vy =
+                -velocityRef.current.vy * params.bounceFactor;
             }
           } else if (minOverlap === overlapBottom) {
             posRef.current.y += minOverlap;
-            velocityRef.current.vy = -velocityRef.current.vy * params.bounceFactor;
+            velocityRef.current.vy =
+              -velocityRef.current.vy * params.bounceFactor;
           } else if (minOverlap === overlapLeft) {
             posRef.current.x -= minOverlap;
             velocityRef.current.vx =
@@ -236,45 +248,52 @@ const DraggableCharacter = ({ initialPos }) => {
   /**
    * 동공 이동: 마우스 포인터를 따라 동공이 움직임
    */
-  const handlePupilMovement = useCallback((e) => {
-    const charRect = characterRef.current?.getBoundingClientRect();
-    if (!charRect) return;
-    const getEyeCenter = (eyeX) => ({
-      x: charRect.left + charRect.width * eyeX,
-      y: charRect.top + charRect.height * EYE_CONSTANTS.EYE_Y,
-    });
-    const leftEyeCenter = getEyeCenter(EYE_CONSTANTS.LEFT_EYE_X);
-    const rightEyeCenter = getEyeCenter(EYE_CONSTANTS.RIGHT_EYE_X);
+  const handlePupilMovement = useCallback(
+    (e) => {
+      const charRect = characterRef.current?.getBoundingClientRect();
+      if (!charRect) return;
+      const getEyeCenter = (eyeX) => ({
+        x: charRect.left + charRect.width * eyeX,
+        y: charRect.top + charRect.height * EYE_CONSTANTS.EYE_Y,
+      });
+      const leftEyeCenter = getEyeCenter(EYE_CONSTANTS.LEFT_EYE_X);
+      const rightEyeCenter = getEyeCenter(EYE_CONSTANTS.RIGHT_EYE_X);
 
-    const calcOffset = (center) => {
-      const dx = e.clientX - center.x;
-      const dy = e.clientY - center.y;
-      const angle = Math.atan2(dy, dx);
-      return {
-        x: Math.cos(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
-        y: Math.sin(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
+      const calcOffset = (center) => {
+        const dx = e.clientX - center.x;
+        const dy = e.clientY - center.y;
+        const angle = Math.atan2(dy, dx);
+        return {
+          x: Math.cos(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
+          y: Math.sin(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
+        };
       };
-    };
 
-    const leftOffset = calcOffset(leftEyeCenter);
-    const rightOffset = calcOffset(rightEyeCenter);
+      const leftOffset = calcOffset(leftEyeCenter);
+      const rightOffset = calcOffset(rightEyeCenter);
 
-    // 동공 위치 업데이트
-    if (characterRef.current) {
-      const leftPupil = characterRef.current.querySelector('#leftPupil');
-      const rightPupil = characterRef.current.querySelector('#rightPupil');
-      if (leftPupil && rightPupil) {
-        leftPupil.setAttribute(
-          'transform',
-          `translate(${EYE_CONSTANTS.LEFT_PUPIL_OFFSET + leftOffset.x} ${leftOffset.y})`
-        );
-        rightPupil.setAttribute(
-          'transform',
-          `translate(${EYE_CONSTANTS.RIGHT_PUPIL_OFFSET + rightOffset.x} ${rightOffset.y})`
-        );
+      // 동공 위치 업데이트
+      if (characterRef.current) {
+        const leftPupil = characterRef.current.querySelector('#leftPupil');
+        const rightPupil = characterRef.current.querySelector('#rightPupil');
+        if (leftPupil && rightPupil) {
+          leftPupil.setAttribute(
+            'transform',
+            `translate(${EYE_CONSTANTS.LEFT_PUPIL_OFFSET + leftOffset.x} ${
+              leftOffset.y
+            })`
+          );
+          rightPupil.setAttribute(
+            'transform',
+            `translate(${EYE_CONSTANTS.RIGHT_PUPIL_OFFSET + rightOffset.x} ${
+              rightOffset.y
+            })`
+          );
+        }
       }
-    }
-  }, [EYE_CONSTANTS]);
+    },
+    [EYE_CONSTANTS]
+  );
 
   // 전역 이벤트 리스너 등록 (포인터 이동/종료 및 동공 이동)
   useEffect(() => {
@@ -374,14 +393,27 @@ const DraggableCharacter = ({ initialPos }) => {
           <path d="M-15,0h30" stroke="#FFE666" strokeWidth="1" opacity="0.5" />
 
           {/* 눈: 동일한 구조로 렌더링 (동공은 id를 부여하여 업데이트) */}
-          <g transform="matrix(1.37111 0 0 2.052324 0 -0.428863)" className="blink">
+          <g
+            transform="matrix(1.37111 0 0 2.052324 0 -0.428863)"
+            className="blink"
+          >
             <g transform="translate(-4.334689 0)">
               <circle r="3" fill="#fff" />
-              <circle id="leftPupil" r="1.5" transform="translate(0.926524 0)" fill="#333" />
+              <circle
+                id="leftPupil"
+                r="1.5"
+                transform="translate(0.926524 0)"
+                fill="#333"
+              />
             </g>
             <g transform="translate(4.334688 0)">
               <circle r="3" fill="#fff" />
-              <circle id="rightPupil" r="1.5" transform="translate(0.879059 0)" fill="#333" />
+              <circle
+                id="rightPupil"
+                r="1.5"
+                transform="translate(0.879059 0)"
+                fill="#333"
+              />
             </g>
           </g>
 
@@ -401,15 +433,14 @@ const DraggableCharacter = ({ initialPos }) => {
 
           {/* 입: 눌렀을 때는 원형, 기본 상태는 웃는 모양 */}
           {isSqueezing ? (
-            <circle cx="0" cy="7" r="3" fill="#dd595b" //놀란듯한 원형 입
-            />
+            <circle cx="0" cy="7" r="3" fill="#dd595b" /> // 놀라서 동그랗게 벌린 입
           ) : (
             <path
               d="M-4,7q4,3,8,0"
               fill="none"
               stroke="#333"
               strokeWidth="1.5"
-              strokeLinecap="round" //방글방글 웃는 입
+              strokeLinecap="round" // 방글방글 웃는 입
             />
           )}
         </g>
@@ -419,25 +450,73 @@ const DraggableCharacter = ({ initialPos }) => {
 };
 
 /**
- * TetrisTitle 컴포넌트
+ * SevenDropsTitle 컴포넌트
  *
- * - 배경의 테트리미노, “TETRIS” 타이틀, 메뉴 버튼을 렌더링합니다.
+ * - 배경의 Tangram 조각, “7DROPS” 타이틀, 메뉴 버튼을 렌더링합니다.
  * - 모든 요소에 .obstacle 클래스를 부여해 캐릭터가 충돌하도록 합니다.
  * - 글자 S의 위치를 참조하여 캐릭터의 초기 위치를 결정합니다.
  */
-const TetrisTitle = () => {
+const SevenDropsTitle = () => {
   const [hoveredButton, setHoveredButton] = useState(null);
   const [characterInitialPos, setCharacterInitialPos] = useState(null);
   const letterSRef = useRef(null);
 
-  // 테트리미노 정보 (랜덤 위치와 회전 효과)
-  const tetriminoes = [
-    { color: 'bg-cyan-500', shape: 'h-6 w-24' },
-    { color: 'bg-yellow-500', shape: 'h-12 w-12' },
-    { color: 'bg-purple-500', shape: 'h-6 w-16' },
-    { color: 'bg-green-500', shape: 'h-12 w-16' },
-    { color: 'bg-red-500', shape: 'h-8 w-8' },
-    { color: 'bg-blue-500', shape: 'h-16 w-8' },
+  // Tangram 조각 정보 (랜덤 위치와 회전 효과)
+  // 기존 'tetriminoes' 대신, 각 조각을 Tangram 조각 모양으로 재정의합니다.
+  // - 시안색: 중간 크기 삼각형 (적당한 나머지 형태)
+  // - 노란색: 정사각형 (노란 조각, 그대로 유지)
+  // - 보라색: 작은 삼각형
+  // - 녹색: 평행사변형
+  // - 붉은색, 파란색: 큰 삼각형
+  const tangramPieces = [
+    {
+      color: 'bg-cyan-500',
+      style: {
+        width: '4rem',
+        height: '4rem',
+        clipPath: 'polygon(0 0, 100% 0, 50% 100%)', // 중간 크기 삼각형
+      },
+    },
+    {
+      color: 'bg-yellow-500',
+      style: {
+        width: '4rem',
+        height: '4rem',
+        clipPath: 'none', // 정사각형
+      },
+    },
+    {
+      color: 'bg-purple-500',
+      style: {
+        width: '3rem',
+        height: '3rem',
+        clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)', // 작은 삼각형
+      },
+    },
+    {
+      color: 'bg-green-500',
+      style: {
+        width: '4rem',
+        height: '3rem',
+        clipPath: 'polygon(25% 0%, 100% 0%, 75% 100%, 0% 100%)', // 평행사변형
+      },
+    },
+    {
+      color: 'bg-red-500',
+      style: {
+        width: '5rem',
+        height: '5rem',
+        clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)', // 큰 삼각형
+      },
+    },
+    {
+      color: 'bg-blue-500',
+      style: {
+        width: '5rem',
+        height: '5rem',
+        clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)', // 큰 삼각형
+      },
+    },
   ];
 
   // 글자 S가 렌더링되면 해당 위치를 참조하여 캐릭터의 초기 위치 설정
@@ -455,12 +534,13 @@ const TetrisTitle = () => {
 
   return (
     <div className="h-screen w-full bg-gray-900 flex flex-col items-center justify-center relative overflow-hidden">
-      {/* 떠다니는 테트리미노 장애물 */}
-      {tetriminoes.map((tet, index) => (
+      {/* 떠다니는 Tangram 조각 장애물 */}
+      {tangramPieces.map((piece, index) => (
         <div
           key={index}
-          className={`absolute obstacle ${tet.color} ${tet.shape} opacity-20 transition-all duration-3000 ease-in-out animate-pulse`}
+          className={`absolute obstacle opacity-20 transition-all duration-3000 ease-in-out animate-pulse ${piece.color}`}
           style={{
+            ...piece.style,
             left: `${Math.random() * 80 + 10}%`,
             top: `${Math.random() * 80 + 10}%`,
             transform: `rotate(${Math.random() * 360}deg)`,
@@ -509,7 +589,11 @@ const TetrisTitle = () => {
             className={`obstacle bg-${btn.color}-500 hover:bg-${btn.color}-600 
                         text-white py-4 px-6 rounded-lg flex items-center justify-center gap-2 
                         transform transition-all duration-300
-                        ${hoveredButton === index ? 'scale-105 -translate-y-1' : ''}
+                        ${
+                          hoveredButton === index
+                            ? 'scale-105 -translate-y-1'
+                            : ''
+                        }
                         shadow-lg hover:shadow-${btn.color}-500/50`}
             onMouseEnter={() => setHoveredButton(index)}
             onMouseLeave={() => setHoveredButton(null)}
@@ -528,4 +612,4 @@ const TetrisTitle = () => {
   );
 };
 
-export default TetrisTitle;
+export default SevenDropsTitle;
