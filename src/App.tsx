@@ -1,8 +1,8 @@
 import React from 'react';
-import TetrisTitle from './components/TetrisTitle';
+import SevenDropsTitle from './components/SevenDropsTitle';
 
 function App() {
-  return <TetrisTitle />;
+  return <SevenDropsTitle />;
 }
 
 export default App;

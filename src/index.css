@@ -1,3 +1,34 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* index.css 또는 전역 스타일에 추가 */
+
+@keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-20px) rotate(180deg); }
+  }
+  
+  @keyframes shake-piece {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-5px, -5px); }
+    75% { transform: translate(5px, 5px); }
+  }
+  
+  .glow-piece {
+    animation: glow 0.5s ease-in-out;
+    filter: brightness(1.5);
+  }
+  
+  .animate-float {
+    animation: float 10s ease-in-out infinite;
+  }
+  
+  /* (추가로 버튼 활성화 시 효과 클래스도 함께 관리) */
+  .scale-110 {
+    transform: scale(1.1) !important;
+  }
+  .ring-4 {
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.5);
+  }
+  
