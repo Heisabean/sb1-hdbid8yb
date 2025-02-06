@@ -6,9 +6,10 @@ export const SOUNDS = {
     bgm: new Audio('/sounds/music/calm-puzzle.mp3')            // 잔잔한 배경음악
   };
   
-  // 볼륨 및 페이드 인/아웃 설정
+  // 볼륨 및 기본 설정
   Object.values(SOUNDS).forEach(sound => {
     sound.volume = 0.6;  // 기본 볼륨 60%
   });
   SOUNDS.bgm.loop = true;
-  SOUNDS.bgm.volume = 0.3;  // BGM은 30% 볼륨  
+  SOUNDS.bgm.volume = 0.3;  // BGM은 30% 볼륨
+  

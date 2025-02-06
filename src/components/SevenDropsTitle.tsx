@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Trophy, LogOut } from 'lucide-react';
-import { SOUNDS } from './utils/sound';
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { Play, Trophy, LogOut } from "lucide-react";
+import { SOUNDS } from "../utils/sound";
 
 /**
  * 단순 AABB 충돌 테스트 함수
@@ -18,13 +18,12 @@ function isColliding(rect1, rect2) {
  * DraggableCharacter 컴포넌트
  *
  * - 초기 위치에서 시작하며 드래그 후 중력의 영향을 받습니다.
- * - 화면 경계 및 .obstacle 요소(버튼 및 Tangram 조각)와 충돌 시 튕깁니다.
- * - 버튼 충돌 시 버튼 활성화 효과(사운드 재생, 확대/하이라이트)를 적용합니다.
- * - Tangram 조각 충돌 시 조각이 흔들리고 빛나는 효과를 줍니다.
+ * - 화면 경계 및 .obstacle 요소(메뉴 버튼, 배경 Tangram 조각, 타이틀 글자)와 충돌 시 튕깁니다.
+ * - "게임 시작" 버튼과 충돌 시 버튼 활성화 효과(사운드 재생, 확대/하이라이트)를 적용합니다.
+ * - Tangram 조각과 충돌 시 조각이 흔들리고 빛나는 효과를 줍니다.
  * - 클릭 시 위로 점프하는 힘이 가해집니다.
  */
 const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
-  // 위치/애니메이션 관련 상태 및 ref
   const [pos, setPos] = useState(initialPos || { x: window.innerWidth - 80, y: 100 });
   const [isSqueezing, setIsSqueezing] = useState(false);
   const [rotation, setRotation] = useState(0);
@@ -49,52 +48,45 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
 
   // 충돌 시 물리 파라미터
   const PHYSICS_PARAMS = {
-    ground: {
-      bounceFactor: 0.7,
-      friction: 0.95,
-      landingThreshold: 150,
-    },
-    obstacle: {
-      bounceFactor: 0.7,
-      friction: 0.98,
-      landingThreshold: 200,
-    },
+    ground: { bounceFactor: 0.7, friction: 0.95, landingThreshold: 150 },
+    obstacle: { bounceFactor: 0.7, friction: 0.98, landingThreshold: 200 },
   };
 
-  // 물리 상수
   const gravity = 2000; // px/s²
   const bounceFactor = 0.7;
 
   /**
-   * 버튼 충돌 시 활성화 효과 처리 (사운드 재생, 버튼 확대)
+   * 버튼 충돌 시 활성화 효과 (게임 시작 버튼에 한정)
    */
   const handleCollisionWithButton = useCallback((button) => {
-    SOUNDS.hover.play();
-    if (onButtonActivate) {
-      onButtonActivate(button);
+    // "게임 시작" 버튼에만 적용
+    if (button === "게임 시작") {
+      SOUNDS.hover.play();
+      if (onButtonActivate) {
+        onButtonActivate(button);
+      }
+      const buttonElement = document.querySelector(`[data-menu-item="${button}"]`);
+      buttonElement?.classList.add("scale-110", "ring-4", "ring-white/50");
     }
-    const buttonElement = document.querySelector(`[data-menu-item="${button}"]`);
-    buttonElement?.classList.add('scale-110', 'ring-4', 'ring-white/50');
   }, [onButtonActivate]);
 
   /**
-   * Tangram 조각과 충돌 시 흔들림 및 빛나는 효과 적용
+   * Tangram 조각 충돌 시 흔들림 및 빛나는 효과 적용
    */
   const handlePieceCollision = useCallback((piece) => {
-    piece.classList.add('shake-piece', 'glow-piece');
+    piece.classList.add("shake-piece", "glow-piece");
     setTimeout(() => {
-      piece.classList.remove('shake-piece', 'glow-piece');
+      piece.classList.remove("shake-piece", "glow-piece");
     }, 500);
   }, []);
 
   /**
-   * 물리 시뮬레이션 단계: 중력, 위치 업데이트, 충돌 처리
+   * 물리 시뮬레이션 단계 – 중력 적용, 위치 업데이트, 충돌 처리
    */
   const physicsStep = (time) => {
     const dt = (time - lastTimeRef.current) / 1000;
     lastTimeRef.current = time;
 
-    // 드래그 중이 아니면 중력 적용
     if (!draggingRef.current) {
       velocityRef.current.vy += gravity * dt;
     }
@@ -123,34 +115,32 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
         velocityRef.current.vy = -velocityRef.current.vy * bounceFactor;
       }
 
-      // 모든 .obstacle 요소(버튼, 배경 Tangram 조각, 타이틀 글자)와의 충돌 검사
-      const obstacles = document.querySelectorAll('.obstacle');
+      // 모든 .obstacle 요소와 충돌 검사
+      const obstacles = document.querySelectorAll(".obstacle");
       obstacles.forEach((obstacle) => {
         if (obstacle === charElem) return;
         const obsRect = obstacle.getBoundingClientRect();
         const charRect = charElem.getBoundingClientRect();
         if (isColliding(charRect, obsRect)) {
-          // 버튼 충돌: 버튼은 data-menu-item 속성을 가짐
+          // 버튼(데이터 속성이 있는 경우)와 충돌 시
           if (obstacle.dataset.menuItem) {
             handleCollisionWithButton(obstacle.dataset.menuItem);
           }
-          // Tangram 조각(또는 배경 요소) 충돌: DIV 요소로 가정
-          else if (obstacle.tagName === 'DIV') {
+          // Tangram 조각(또는 배경 요소)와 충돌 시
+          else if (obstacle.tagName === "DIV") {
             handlePieceCollision(obstacle);
           }
 
-          // 기존 충돌 처리: 겹치는 최소값에 따라 위치 및 속도 조정
+          // 기본 충돌 처리 (겹치는 최소 오버랩에 따라 처리)
           const overlapLeft = charRect.right - obsRect.left;
           const overlapRight = obsRect.right - charRect.left;
           const overlapTop = charRect.bottom - obsRect.top;
           const overlapBottom = obsRect.bottom - charRect.top;
           const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
-
           const isLetterObstacle = obstacle.textContent.trim().length === 1;
           const params = isLetterObstacle ? PHYSICS_PARAMS.obstacle : PHYSICS_PARAMS.ground;
 
           if (minOverlap === overlapTop) {
-            // 캐릭터가 조각 위에 착지하는 경우
             if (Math.abs(velocityRef.current.vy) < params.landingThreshold) {
               posRef.current.y = obsRect.top - charHeight;
               velocityRef.current.vy = 0;
@@ -183,8 +173,6 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
     }
 
     setPos({ x: posRef.current.x, y: posRef.current.y });
-
-    // 움직임이 있으면 계속 애니메이션
     if (
       draggingRef.current ||
       Math.abs(velocityRef.current.vx) > 1 ||
@@ -198,7 +186,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
   };
 
   /**
-   * 포인터 좌표 추출 (마우스, 터치 모두 지원)
+   * 포인터 좌표 추출 (마우스/터치 공통)
    */
   const getPointerCoords = (e) => {
     if (e.touches && e.touches.length) {
@@ -208,7 +196,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
   };
 
   /**
-   * 드래그 시작 핸들러 (마우스/터치 공통)
+   * 드래그 시작 핸들러
    */
   const handleDragStart = (e) => {
     e.preventDefault();
@@ -221,15 +209,13 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
   };
 
   /**
-   * 드래그 이동 핸들러 (마우스/터치 공통)
+   * 드래그 이동 핸들러
    */
   const handleDragMove = useCallback((e) => {
     if (!draggingRef.current) return;
     const { x, y, movementX } = getPointerCoords(e);
     if (movementX) {
-      setRotation((prev) =>
-        Math.max(-30, Math.min(30, prev + movementX * 0.1))
-      );
+      setRotation((prev) => Math.max(-30, Math.min(30, prev + movementX * 0.1)));
     }
     const newX = x - offsetRef.current.x;
     const newY = y - offsetRef.current.y;
@@ -238,7 +224,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
   }, []);
 
   /**
-   * 드래그 종료 핸들러 (마우스/터치 공통)
+   * 드래그 종료 핸들러
    */
   const handleDragEnd = useCallback(() => {
     if (draggingRef.current) {
@@ -251,7 +237,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
   }, []);
 
   /**
-   * 동공 이동: 마우스 포인터 방향으로 동공 이동
+   * 동공 이동: 마우스 포인터 방향으로 이동
    */
   const handlePupilMovement = useCallback(
     (e) => {
@@ -263,7 +249,6 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
       });
       const leftEyeCenter = getEyeCenter(EYE_CONSTANTS.LEFT_EYE_X);
       const rightEyeCenter = getEyeCenter(EYE_CONSTANTS.RIGHT_EYE_X);
-
       const calcOffset = (center) => {
         const dx = e.clientX - center.x;
         const dy = e.clientY - center.y;
@@ -273,20 +258,18 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
           y: Math.sin(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
         };
       };
-
       const leftOffset = calcOffset(leftEyeCenter);
       const rightOffset = calcOffset(rightEyeCenter);
-
       if (characterRef.current) {
-        const leftPupil = characterRef.current.querySelector('#leftPupil');
-        const rightPupil = characterRef.current.querySelector('#rightPupil');
+        const leftPupil = characterRef.current.querySelector("#leftPupil");
+        const rightPupil = characterRef.current.querySelector("#rightPupil");
         if (leftPupil && rightPupil) {
           leftPupil.setAttribute(
-            'transform',
+            "transform",
             `translate(${EYE_CONSTANTS.LEFT_PUPIL_OFFSET + leftOffset.x} ${leftOffset.y})`
           );
           rightPupil.setAttribute(
-            'transform',
+            "transform",
             `translate(${EYE_CONSTANTS.RIGHT_PUPIL_OFFSET + rightOffset.x} ${rightOffset.y})`
           );
         }
@@ -296,22 +279,22 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
   );
 
   useEffect(() => {
-    window.addEventListener('mousemove', handlePupilMovement);
-    window.addEventListener('mousemove', handleDragMove);
-    window.addEventListener('mouseup', handleDragEnd);
-    window.addEventListener('touchmove', handleDragMove, { passive: false });
-    window.addEventListener('touchend', handleDragEnd);
+    window.addEventListener("mousemove", handlePupilMovement);
+    window.addEventListener("mousemove", handleDragMove);
+    window.addEventListener("mouseup", handleDragEnd);
+    window.addEventListener("touchmove", handleDragMove, { passive: false });
+    window.addEventListener("touchend", handleDragEnd);
     return () => {
-      window.removeEventListener('mousemove', handlePupilMovement);
-      window.removeEventListener('mousemove', handleDragMove);
-      window.removeEventListener('mouseup', handleDragEnd);
-      window.removeEventListener('touchmove', handleDragMove);
-      window.removeEventListener('touchend', handleDragEnd);
+      window.removeEventListener("mousemove", handlePupilMovement);
+      window.removeEventListener("mousemove", handleDragMove);
+      window.removeEventListener("mouseup", handleDragEnd);
+      window.removeEventListener("touchmove", handleDragMove);
+      window.removeEventListener("touchend", handleDragEnd);
     };
   }, [handlePupilMovement, handleDragMove, handleDragEnd]);
 
   /**
-   * 클릭 시 위로 점프하는 핸들러 (드래그 중이 아닐 때)
+   * 클릭 시 위로 점프하는 핸들러
    */
   const handleClick = () => {
     if (!draggingRef.current) {
@@ -330,22 +313,22 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
       onMouseDown={handleDragStart}
       onTouchStart={handleDragStart}
       onClick={handleClick}
-      className={`absolute cursor-grab ${!draggingRef.current ? 'bounce' : ''}`}
+      className={`absolute cursor-grab ${!draggingRef.current ? "bounce" : ""}`}
       style={{
         left: pos.x,
         top: pos.y,
-        width: '3rem',
-        height: '3rem',
+        width: "3rem",
+        height: "3rem",
         zIndex: 1000,
         transform: `rotate(${rotation}deg)`,
-        transition: draggingRef.current ? 'none' : 'transform 0.3s ease',
+        transition: draggingRef.current ? "none" : "transform 0.3s ease",
       }}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 40 40"
         className="w-full h-full"
-        style={{ overflow: 'visible' }}
+        style={{ overflow: "visible" }}
       >
         <defs>
           <linearGradient
@@ -414,7 +397,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
             opacity="0.6"
             fill="#FFB6C1"
           />
-          {/* 입: 눌렀을 때와 기본 상태 */}
+          {/* 입 */}
           {isSqueezing ? (
             <circle cx="0" cy="7" r="3" fill="#dd595b" />
           ) : (
@@ -437,72 +420,44 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
  *
  * - 배경의 Tangram 조각, “7DROPS” 타이틀, 메뉴 버튼을 렌더링합니다.
  * - 모든 요소에 .obstacle 클래스를 부여하여 캐릭터와의 충돌을 유도합니다.
- * - 마우스 움직임에 따른 시차 효과와 배경 조각 애니메이션을 적용합니다.
+ * - 버튼 위에 커서가 올라갈 때와 벗어날 때만 배경 조각의 시차 효과가 반영됩니다.
  */
 const SevenDropsTitle = () => {
   const [hoveredButton, setHoveredButton] = useState(null);
   const [characterInitialPos, setCharacterInitialPos] = useState(null);
+  // 버튼 위에 있을 때 적용할 parallax offset 상태
+  const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
   const letterSRef = useRef(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  // Tangram 조각 정보 (색상, 크기, 모양)
-  // - 시안색: 중간 크기 삼각형
-  // - 노란색: 정사각형 (원래 노란 조각)
-  // - 보라색: 작은 삼각형
-  // - 녹색: 평행사변형
-  // - 붉은색, 파란색: 큰 삼각형
+  // Tangram 조각 정보
   const tangramPieces = [
     {
-      color: 'bg-cyan-500',
-      style: {
-        width: '4rem',
-        height: '4rem',
-        clipPath: 'polygon(0 0, 100% 0, 50% 100%)',
-      },
+      color: "bg-cyan-500",
+      style: { width: "4rem", height: "4rem", clipPath: "polygon(0 0, 100% 0, 50% 100%)" },
     },
     {
-      color: 'bg-yellow-500',
-      style: {
-        width: '4rem',
-        height: '4rem',
-        clipPath: 'none',
-      },
+      color: "bg-yellow-500",
+      style: { width: "4rem", height: "4rem", clipPath: "none" },
     },
     {
-      color: 'bg-purple-500',
-      style: {
-        width: '3rem',
-        height: '3rem',
-        clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-      },
+      color: "bg-purple-500",
+      style: { width: "3rem", height: "3rem", clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)" },
     },
     {
-      color: 'bg-green-500',
-      style: {
-        width: '4rem',
-        height: '3rem',
-        clipPath: 'polygon(25% 0%, 100% 0%, 75% 100%, 0% 100%)',
-      },
+      color: "bg-green-500",
+      style: { width: "4rem", height: "3rem", clipPath: "polygon(25% 0%, 100% 0%, 75% 100%, 0% 100%)" },
     },
     {
-      color: 'bg-red-500',
-      style: {
-        width: '5rem',
-        height: '5rem',
-        clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-      },
+      color: "bg-red-500",
+      style: { width: "5rem", height: "5rem", clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)" },
     },
     {
-      color: 'bg-blue-500',
-      style: {
-        width: '5rem',
-        height: '5rem',
-        clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-      },
+      color: "bg-blue-500",
+      style: { width: "5rem", height: "5rem", clipPath: "polygon(50% 0%, 0% 100%, 100% 100%)" },
     },
   ];
 
-  // 글자 S가 렌더링되면 캐릭터의 초기 위치로 설정
+  // 글자 S 렌더링 후 캐릭터 초기 위치 설정
   useEffect(() => {
     if (letterSRef.current) {
       const rect = letterSRef.current.getBoundingClientRect();
@@ -515,21 +470,18 @@ const SevenDropsTitle = () => {
     }
   }, []);
 
-  // 마우스 움직임에 따른 시차 효과 적용
+  // BGM 자동 재생 유도 (첫 사용자 클릭 후)
   useEffect(() => {
-    const handleMouseMove = (e) => {
-      const { clientX, clientY } = e;
-      const moveX = (clientX - window.innerWidth / 2) * 0.05;
-      const moveY = (clientY - window.innerHeight / 2) * 0.05;
-      setMousePos({ x: moveX, y: moveY });
+    const playBgm = () => {
+      SOUNDS.bgm.play().catch((err) => console.log(err));
+      document.removeEventListener("click", playBgm);
     };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    document.addEventListener("click", playBgm, { once: true });
   }, []);
 
   return (
     <div className="h-screen w-full bg-gray-900 flex flex-col items-center justify-center relative overflow-hidden">
-      {/* 떠다니는 Tangram 조각 (시차 효과 및 애니메이션 적용) */}
+      {/* 떠다니는 Tangram 조각 (버튼 위에 커서가 있을 때만 parallax offset 적용) */}
       {tangramPieces.map((piece, index) => (
         <div
           key={index}
@@ -542,7 +494,7 @@ const SevenDropsTitle = () => {
             left: `${Math.random() * 80 + 10}%`,
             top: `${Math.random() * 80 + 10}%`,
             animationDelay: `${index * -2}s`,
-            transform: `translate(${mousePos.x}px, ${mousePos.y}px) rotate(${Math.random() * 360}deg)`,
+            transform: `translate(${parallaxOffset.x}px, ${parallaxOffset.y}px) rotate(${Math.random() * 360}deg)`,
           }}
         />
       ))}
@@ -550,24 +502,24 @@ const SevenDropsTitle = () => {
       {/* 타이틀 */}
       <div className="relative mb-16">
         <h1 className="font-bold mb-12 tracking-widest flex items-center justify-center gap-1">
-          <span className="obstacle text-cyan-400 hover:text-cyan-300 transition-colors duration-300 text-7xl relative leading-none inline-block">
+          <span className="obstacle text-cyan-400 transition-colors duration-300 text-7xl relative leading-none inline-block">
             7
           </span>
-          <span className="obstacle text-yellow-400 hover:text-yellow-300 transition-colors duration-300 text-6xl relative leading-none inline-block">
+          <span className="obstacle text-yellow-400 transition-colors duration-300 text-6xl relative leading-none inline-block">
             D
           </span>
-          <span className="obstacle text-purple-400 hover:text-purple-300 transition-colors duration-300 text-6xl relative leading-none inline-block">
+          <span className="obstacle text-purple-400 transition-colors duration-300 text-6xl relative leading-none inline-block">
             R
           </span>
-          <span className="obstacle text-green-400 hover:text-green-300 transition-colors duration-300 text-6xl relative leading-none inline-block">
+          <span className="obstacle text-green-400 transition-colors duration-300 text-6xl relative leading-none inline-block">
             O
           </span>
-          <span className="obstacle text-red-400 hover:text-red-300 transition-colors duration-300 text-6xl relative leading-none inline-block">
+          <span className="obstacle text-red-400 transition-colors duration-300 text-6xl relative leading-none inline-block">
             P
           </span>
           <span
             ref={letterSRef}
-            className="obstacle text-blue-400 hover:text-blue-300 transition-colors duration-300 text-6xl relative leading-none inline-block"
+            className="obstacle text-blue-400 transition-colors duration-300 text-6xl relative leading-none inline-block"
           >
             S
           </span>
@@ -578,9 +530,9 @@ const SevenDropsTitle = () => {
       {/* 메뉴 버튼 */}
       <div className="flex flex-col gap-4 w-64 relative z-10">
         {[
-          { icon: Play, text: '게임 시작', color: 'cyan' },
-          { icon: Trophy, text: '리더보드', color: 'purple' },
-          { icon: LogOut, text: '나가기', color: 'red' },
+          { icon: Play, text: "게임 시작", color: "cyan" },
+          { icon: Trophy, text: "리더보드", color: "purple" },
+          { icon: LogOut, text: "나가기", color: "red" },
         ].map((btn, index) => (
           <button
             key={index}
@@ -588,10 +540,17 @@ const SevenDropsTitle = () => {
             className={`obstacle bg-${btn.color}-500 hover:bg-${btn.color}-600 
                         text-white py-4 px-6 rounded-lg flex items-center justify-center gap-2 
                         transform transition-all duration-300
-                        ${hoveredButton === index ? 'scale-105 -translate-y-1' : ''}
+                        ${hoveredButton === index ? "scale-105 -translate-y-1" : ""}
                         shadow-lg hover:shadow-${btn.color}-500/50`}
-            onMouseEnter={() => setHoveredButton(index)}
-            onMouseLeave={() => setHoveredButton(null)}
+            onMouseEnter={() => {
+              setHoveredButton(index);
+              // 버튼 위에 있을 때 parallax offset 적용 (예시: {x: 10, y: 10})
+              setParallaxOffset({ x: 10, y: 10 });
+            }}
+            onMouseLeave={() => {
+              setHoveredButton(null);
+              setParallaxOffset({ x: 0, y: 0 });
+            }}
           >
             <btn.icon size={24} />
             <span className="font-semibold">{btn.text}</span>
@@ -601,10 +560,13 @@ const SevenDropsTitle = () => {
 
       {/* 드래그 가능한 캐릭터 */}
       {characterInitialPos && (
-        <DraggableCharacter initialPos={characterInitialPos} onButtonActivate={(btn) => {
-          // 추가 액션(예: 상위 컴포넌트 전달) 가능
-          console.log('Button activated:', btn);
-        }} />
+        <DraggableCharacter
+          initialPos={characterInitialPos}
+          onButtonActivate={(btn) => {
+            // 추가 액션 (예: 상위 컴포넌트 전달 등)
+            console.log("Button activated:", btn);
+          }}
+        />
       )}
     </div>
   );
