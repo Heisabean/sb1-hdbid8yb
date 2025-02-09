@@ -1,9 +1,17 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  MouseEvent as ReactMouseEvent,
+  TouchEvent as ReactTouchEvent,
+  KeyboardEvent,
+} from "react";
 import { Play, Trophy, Settings, Volume2, VolumeX } from "lucide-react";
 import { SOUNDS, initializeSounds, playSound } from "../utils/sound";
 
 /* --- Utility: AABB Collision Detection --- */
-function isColliding(rect1, rect2) {
+function isColliding(rect1: DOMRect, rect2: DOMRect): boolean {
   return !(
     rect1.right < rect2.left ||
     rect1.left > rect2.right ||
@@ -15,23 +23,31 @@ function isColliding(rect1, rect2) {
 /* --- DraggableCharacter Component ---
    - 캐릭터를 드래그할 수 있으며, 중력과 충돌 물리 효과를 적용합니다.
    - 버튼과 충돌 시 효과음을 재생하고 버튼에 시각적 효과(커짐, 테두리 강조, 아이콘 기울임)를 줍니다.
-   - 추가로 키보드 화살표와 스페이스 키로 조작할 수 있도록 했습니다.
+   - 키보드 화살표와 스페이스 키로 조작할 수 있도록 했습니다.
 */
-const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
-  const [pos, setPos] = useState(
+interface DraggableCharacterProps {
+  initialPos?: { x: number; y: number };
+  onButtonActivate?: (button: string) => void;
+}
+
+const DraggableCharacter: React.FC<DraggableCharacterProps> = ({
+  initialPos,
+  onButtonActivate,
+}) => {
+  const [pos, setPos] = useState<{ x: number; y: number }>(
     initialPos || { x: window.innerWidth - 80, y: 100 }
   );
-  const [isSqueezing, setIsSqueezing] = useState(false);
-  const [rotation, setRotation] = useState(0);
+  const [isSqueezing, setIsSqueezing] = useState<boolean>(false);
+  const [rotation, setRotation] = useState<number>(0);
 
-  const posRef = useRef(pos);
-  const velocityRef = useRef({ vx: 0, vy: 0 });
-  const characterRef = useRef(null);
-  const offsetRef = useRef({ x: 0, y: 0 });
-  const animationFrameRef = useRef(null);
-  const lastTimeRef = useRef(null);
-  const draggingRef = useRef(false);
-  const lastCollidedButton = useRef(null);
+  const posRef = useRef<{ x: number; y: number }>(pos);
+  const velocityRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
+  const characterRef = useRef<HTMLDivElement>(null);
+  const offsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const animationFrameRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number | null>(null);
+  const draggingRef = useRef<boolean>(false);
+  const lastCollidedButton = useRef<string | null>(null);
 
   // 눈 움직임 관련 상수
   const EYE_CONSTANTS = {
@@ -44,33 +60,36 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
   };
 
   // 충돌 물리 파라미터
-  const PHYSICS_PARAMS = {
+  const PHYSICS_PARAMS: {
+    ground: { bounceFactor: number; friction: number; landingThreshold: number };
+    obstacle: { bounceFactor: number; friction: number; landingThreshold: number };
+  } = {
     ground: { bounceFactor: 0.7, friction: 0.95, landingThreshold: 150 },
     obstacle: { bounceFactor: 0.7, friction: 0.98, landingThreshold: 200 },
   };
-  const gravity = 2000,
-    bounceFactor = 0.7;
+  const gravity = 2000;
+  const bounceFactor = 0.7;
 
   // 버튼과 충돌 시 효과 및 사운드 처리 + 메뉴 아이콘 기울임 효과 추가
   const handleCollisionWithButton = useCallback(
-    (button, isCollidingFlag) => {
+    (button: string, isCollidingFlag: boolean) => {
       const buttonElement = document.querySelector(
         `[data-menu-item="${button}"]`
-      );
+      ) as HTMLElement | null;
       if (isCollidingFlag) {
         if (!lastCollidedButton.current) {
           SOUNDS.hover.play().catch(console.warn);
         }
         buttonElement?.classList.add("scale-110", "ring-4", "ring-white/50");
         // 메뉴 버튼 내 아이콘 기울임 효과
-        const icon = buttonElement?.querySelector("svg");
+        const icon = buttonElement?.querySelector("svg") as HTMLElement | null;
         if (icon) {
           icon.style.transform = "rotate(-10deg)";
         }
         if (onButtonActivate) onButtonActivate(button);
       } else {
         buttonElement?.classList.remove("scale-110", "ring-4", "ring-white/50");
-        const icon = buttonElement?.querySelector("svg");
+        const icon = buttonElement?.querySelector("svg") as HTMLElement | null;
         if (icon) {
           icon.style.transform = "";
         }
@@ -79,8 +98,20 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
     [onButtonActivate]
   );
 
-  // 메인 물리 시뮬레이션 (중력 적용, 위치 업데이트, 충돌 처리)
-  const physicsStep = (time) => {
+  // native 이벤트에서 좌표 추출
+  const getNativePointerCoords = (e: MouseEvent | TouchEvent): { x: number; y: number; movementX: number } => {
+    if (e instanceof TouchEvent) {
+      return { x: e.touches[0].clientX, y: e.touches[0].clientY, movementX: 0 };
+    } else {
+      return { x: e.clientX, y: e.clientY, movementX: e.movementX || 0 };
+    }
+  };
+
+  // 메인 물리 시뮬레이션
+  const physicsStep = (time: number) => {
+    if (lastTimeRef.current === null) {
+      lastTimeRef.current = time;
+    }
     const dt = (time - lastTimeRef.current) / 1000;
     lastTimeRef.current = time;
     if (!draggingRef.current) velocityRef.current.vy += gravity * dt;
@@ -89,8 +120,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
 
     const charElem = characterRef.current;
     if (charElem) {
-      const { width: charWidth, height: charHeight } =
-        charElem.getBoundingClientRect();
+      const { width: charWidth, height: charHeight } = charElem.getBoundingClientRect();
       // 경계 충돌 처리
       if (posRef.current.x < 0) {
         posRef.current.x = 0;
@@ -113,13 +143,14 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
       // 충돌 검사: 버튼, 제목, Tangram 조각 등
       const obstacles = document.querySelectorAll(".obstacle");
       obstacles.forEach((obstacle) => {
-        if (obstacle === charElem) return;
-        const obsRect = obstacle.getBoundingClientRect();
+        const obsElem = obstacle as HTMLElement;
+        if (obsElem === charElem) return;
+        const obsRect = obsElem.getBoundingClientRect();
         const charRect = charElem.getBoundingClientRect();
         if (isColliding(charRect, obsRect)) {
-          if (obstacle.dataset.menuItem) {
-            const buttonName = obstacle.dataset.menuItem;
-            if (buttonName !== lastCollidedButton.current) {
+          if (obsElem.dataset.menuItem) {
+            const buttonName = obsElem.dataset.menuItem;
+            if (buttonName && buttonName !== lastCollidedButton.current) {
               handleCollisionWithButton(buttonName, true);
               lastCollidedButton.current = buttonName;
             }
@@ -131,70 +162,46 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
           }
           if (Math.abs(velocityRef.current.vy) > 100)
             SOUNDS.land.play().catch(console.warn);
-          if (
-            !obstacle.dataset.menuItem &&
-            obstacle.tagName === "DIV"
-          ) {
-            obstacle.classList.add("shake-piece", "glow-piece");
-            setTimeout(
-              () =>
-                obstacle.classList.remove("shake-piece", "glow-piece"),
-              500
-            );
+          if (!obsElem.dataset.menuItem && obsElem.tagName === "DIV") {
+            obsElem.classList.add("shake-piece", "glow-piece");
+            setTimeout(() => obsElem.classList.remove("shake-piece", "glow-piece"), 500);
           }
           // 최소 오버랩에 따른 위치 보정
           const overlapLeft = charRect.right - obsRect.left;
           const overlapRight = obsRect.right - charRect.left;
           const overlapTop = charRect.bottom - obsRect.top;
           const overlapBottom = obsRect.bottom - charRect.top;
-          const minOverlap = Math.min(
-            overlapLeft,
-            overlapRight,
-            overlapTop,
-            overlapBottom
-          );
-          const isLetterObstacle =
-            obstacle.textContent.trim().length === 1;
-          const params = isLetterObstacle
-            ? PHYSICS_PARAMS.obstacle
-            : PHYSICS_PARAMS.ground;
+          const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+          const isLetterObstacle = (obsElem.textContent || "").trim().length === 1;
+          const params = isLetterObstacle ? PHYSICS_PARAMS.obstacle : PHYSICS_PARAMS.ground;
           if (minOverlap === overlapTop) {
             let letterOffsetY = 0;
             if (isLetterObstacle) {
-              const computedStyle = window.getComputedStyle(obstacle);
+              const computedStyle = window.getComputedStyle(obsElem);
               const transform = computedStyle.transform;
               if (transform && transform !== "none") {
                 try {
-                  letterOffsetY =
-                    new DOMMatrix(transform).m42;
+                  letterOffsetY = new DOMMatrix(transform).m42;
                 } catch (e) {
-                  if (obstacle.classList.contains("translate-y-2"))
-                    letterOffsetY = 8;
+                  if (obsElem.classList.contains("translate-y-2")) letterOffsetY = 8;
                 }
-              } else if (obstacle.classList.contains("translate-y-2")) {
+              } else if (obsElem.classList.contains("translate-y-2")) {
                 letterOffsetY = 8;
               }
             }
-            if (
-              Math.abs(velocityRef.current.vy) < params.landingThreshold
-            ) {
+            if (Math.abs(velocityRef.current.vy) < params.landingThreshold) {
               posRef.current.y = obsRect.top - charHeight + letterOffsetY;
               velocityRef.current.vy = 0;
               velocityRef.current.vx *= params.friction;
-              if (
-                Math.abs(velocityRef.current.vx) <
-                (isLetterObstacle ? 2 : 5)
-              )
+              if (Math.abs(velocityRef.current.vx) < (isLetterObstacle ? 2 : 5))
                 velocityRef.current.vx = 0;
             } else {
               posRef.current.y -= minOverlap;
-              velocityRef.current.vy =
-                -velocityRef.current.vy * params.bounceFactor;
+              velocityRef.current.vy = -velocityRef.current.vy * params.bounceFactor;
             }
           } else if (minOverlap === overlapBottom) {
             posRef.current.y += minOverlap;
-            velocityRef.current.vy =
-              -velocityRef.current.vy * params.bounceFactor;
+            velocityRef.current.vy = -velocityRef.current.vy * params.bounceFactor;
           } else if (minOverlap === overlapLeft) {
             posRef.current.x -= minOverlap;
             velocityRef.current.vx =
@@ -209,8 +216,8 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
                 : -velocityRef.current.vx * params.bounceFactor;
           }
         } else if (
-          obstacle.dataset.menuItem &&
-          obstacle.dataset.menuItem === lastCollidedButton.current
+          obsElem.dataset.menuItem &&
+          obsElem.dataset.menuItem === lastCollidedButton.current
         ) {
           handleCollisionWithButton(lastCollidedButton.current, false);
           lastCollidedButton.current = null;
@@ -221,7 +228,9 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
     if (characterRef.current) {
       const charRect = characterRef.current.getBoundingClientRect();
       window.dispatchEvent(
-        new CustomEvent("characterMove", { detail: { charRect } })
+        new CustomEvent<{ charRect: DOMRect }>("characterMove", {
+          detail: { charRect },
+        })
       );
     }
     if (
@@ -231,40 +240,52 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
     ) {
       animationFrameRef.current = requestAnimationFrame(physicsStep);
     } else {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     }
   };
 
-  // Helper: get mouse/touch coordinates
-  const getPointerCoords = (e) =>
-    e.touches && e.touches.length
-      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, movementX: 0 }
-      : {
-          x: e.clientX,
-          y: e.clientY,
-          movementX: e.movementX || 0,
-        };
+  // onMouseDown / onTouchStart (React 이벤트) – native 좌표 추출
+  const getPointerCoords = (
+    e: ReactMouseEvent<HTMLDivElement> | ReactTouchEvent<HTMLDivElement>
+  ): { x: number; y: number; movementX: number } => {
+    if ("touches" in e && e.touches.length > 0) {
+      return { x: e.touches[0].clientX, y: e.touches[0].clientY, movementX: 0 };
+    } else {
+      return {
+        x: (e as ReactMouseEvent<HTMLDivElement>).clientX,
+        y: (e as ReactMouseEvent<HTMLDivElement>).clientY,
+        movementX: (e as ReactMouseEvent<HTMLDivElement>).movementX || 0,
+      };
+    }
+  };
 
-  // Start dragging
-  const handleDragStart = (e) => {
+  // Start dragging (React 이벤트)
+  const handleDragStart = (
+    e: ReactMouseEvent<HTMLDivElement> | ReactTouchEvent<HTMLDivElement>
+  ) => {
     e.preventDefault();
     draggingRef.current = true;
     setIsSqueezing(true);
-    cancelAnimationFrame(animationFrameRef.current);
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
     const { x, y } = getPointerCoords(e);
-    const rect = characterRef.current.getBoundingClientRect();
-    offsetRef.current = { x: x - rect.left, y: y - rect.top };
+    const rect = characterRef.current?.getBoundingClientRect();
+    if (rect) {
+      offsetRef.current = { x: x - rect.left, y: y - rect.top };
+    }
   };
 
-  // During dragging, update position and rotation
-  const handleDragMove = useCallback((e) => {
+  // Window 이벤트용 드래그 핸들러 (native 이벤트)
+  const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
     if (!draggingRef.current) return;
-    const { x, y, movementX } = getPointerCoords(e);
-    if (movementX)
-      setRotation((prev) =>
-        Math.max(-30, Math.min(30, prev + movementX * 0.1))
-      );
+    const { x, y, movementX } = getNativePointerCoords(e);
+    if (e instanceof MouseEvent && movementX) {
+      setRotation((prev) => Math.max(-30, Math.min(30, prev + movementX * 0.1)));
+    }
     const newX = x - offsetRef.current.x;
     const newY = y - offsetRef.current.y;
     posRef.current = { x: newX, y: newY };
@@ -282,60 +303,53 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
     }
   }, []);
 
-  // Move pupils toward mouse pointer
-  const handlePupilMovement = useCallback(
-    (e) => {
-      const charRect = characterRef.current?.getBoundingClientRect();
-      if (!charRect) return;
-      const getEyeCenter = (eyeX) => ({
-        x: charRect.left + charRect.width * eyeX,
-        y: charRect.top + charRect.height * EYE_CONSTANTS.EYE_Y,
-      });
-      const leftEyeCenter = getEyeCenter(EYE_CONSTANTS.LEFT_EYE_X);
-      const rightEyeCenter = getEyeCenter(EYE_CONSTANTS.RIGHT_EYE_X);
-      const calcOffset = (center) => {
-        const dx = e.clientX - center.x;
-        const dy = e.clientY - center.y;
-        const angle = Math.atan2(dy, dx);
-        return {
-          x: Math.cos(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
-          y: Math.sin(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
-        };
+  // Move pupils toward mouse pointer (native 이벤트)
+  const handlePupilMovement = useCallback((e: MouseEvent) => {
+    const charRect = characterRef.current?.getBoundingClientRect();
+    if (!charRect) return;
+    const getEyeCenter = (eyeX: number) => ({
+      x: charRect.left + charRect.width * eyeX,
+      y: charRect.top + charRect.height * EYE_CONSTANTS.EYE_Y,
+    });
+    const leftEyeCenter = getEyeCenter(EYE_CONSTANTS.LEFT_EYE_X);
+    const rightEyeCenter = getEyeCenter(EYE_CONSTANTS.RIGHT_EYE_X);
+    const calcOffset = (center: { x: number; y: number }) => {
+      const dx = e.clientX - center.x;
+      const dy = e.clientY - center.y;
+      const angle = Math.atan2(dy, dx);
+      return {
+        x: Math.cos(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
+        y: Math.sin(angle) * EYE_CONSTANTS.MAX_PUPIL_OFFSET,
       };
-      const leftOffset = calcOffset(leftEyeCenter);
-      const rightOffset = calcOffset(rightEyeCenter);
-      if (characterRef.current) {
-        const leftPupil = characterRef.current.querySelector("#leftPupil");
-        const rightPupil = characterRef.current.querySelector("#rightPupil");
-        if (leftPupil && rightPupil) {
-          leftPupil.setAttribute(
-            "transform",
-            `translate(${EYE_CONSTANTS.LEFT_PUPIL_OFFSET + leftOffset.x} ${leftOffset.y})`
-          );
-          rightPupil.setAttribute(
-            "transform",
-            `translate(${EYE_CONSTANTS.RIGHT_PUPIL_OFFSET + rightOffset.x} ${rightOffset.y})`
-          );
-        }
+    };
+    const leftOffset = calcOffset(leftEyeCenter);
+    const rightOffset = calcOffset(rightEyeCenter);
+    if (characterRef.current) {
+      const leftPupil = characterRef.current.querySelector("#leftPupil");
+      const rightPupil = characterRef.current.querySelector("#rightPupil");
+      if (leftPupil && rightPupil) {
+        leftPupil.setAttribute(
+          "transform",
+          `translate(${EYE_CONSTANTS.LEFT_PUPIL_OFFSET + leftOffset.x} ${leftOffset.y})`
+        );
+        rightPupil.setAttribute(
+          "transform",
+          `translate(${EYE_CONSTANTS.RIGHT_PUPIL_OFFSET + rightOffset.x} ${rightOffset.y})`
+        );
       }
-    },
-    [EYE_CONSTANTS]
-  );
+    }
+  }, []);
 
-  // 추가: 키보드 조작 지원 (좌우 이동 및 점프)
+  // 키보드 조작 지원
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
         posRef.current.x = Math.max(0, posRef.current.x - 20);
         setPos({ ...posRef.current });
       } else if (e.key === "ArrowRight") {
-        posRef.current.x = Math.min(
-          window.innerWidth - 48,
-          posRef.current.x + 20
-        );
+        posRef.current.x = Math.min(window.innerWidth - 48, posRef.current.x + 20);
         setPos({ ...posRef.current });
       } else if (e.key === " " || e.key === "Spacebar") {
-        // 점프: 스페이스 키
         if (!draggingRef.current) {
           setIsSqueezing(true);
           velocityRef.current.vy = -800;
@@ -350,22 +364,23 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // 윈도우에 native 이벤트 추가 (타입 단언 사용)
   useEffect(() => {
     window.addEventListener("mousemove", handlePupilMovement);
-    window.addEventListener("mousemove", handleDragMove);
-    window.addEventListener("mouseup", handleDragEnd);
-    window.addEventListener("touchmove", handleDragMove, { passive: false });
-    window.addEventListener("touchend", handleDragEnd);
+    window.addEventListener("mousemove", handleDragMove as EventListener);
+    window.addEventListener("mouseup", handleDragEnd as EventListener);
+    window.addEventListener("touchmove", handleDragMove as EventListener, { passive: false });
+    window.addEventListener("touchend", handleDragEnd as EventListener);
     return () => {
       window.removeEventListener("mousemove", handlePupilMovement);
-      window.removeEventListener("mousemove", handleDragMove);
-      window.removeEventListener("mouseup", handleDragEnd);
-      window.removeEventListener("touchmove", handleDragMove);
-      window.removeEventListener("touchend", handleDragEnd);
+      window.removeEventListener("mousemove", handleDragMove as EventListener);
+      window.removeEventListener("mouseup", handleDragEnd as EventListener);
+      window.removeEventListener("touchmove", handleDragMove as EventListener);
+      window.removeEventListener("touchend", handleDragEnd as EventListener);
     };
   }, [handlePupilMovement, handleDragMove, handleDragEnd]);
 
-  // On click, make the character jump
+  // 클릭 시 점프 (React 이벤트)
   const handleClick = () => {
     if (!draggingRef.current) {
       setIsSqueezing(true);
@@ -383,9 +398,7 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
       onMouseDown={handleDragStart}
       onTouchStart={handleDragStart}
       onClick={handleClick}
-      className={`absolute cursor-grab ${
-        !draggingRef.current ? "bounce" : ""
-      }`}
+      className={`absolute cursor-grab ${!draggingRef.current ? "bounce" : ""}`}
       style={{
         left: pos.x,
         top: pos.y,
@@ -458,7 +471,13 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
           {isSqueezing ? (
             <circle cx="0" cy="7" r="3" fill="#dd595b" />
           ) : (
-            <path d="M-4,7q4,3,8,0" fill="none" stroke="#333" strokeWidth="1.5" strokeLinecap="round" />
+            <path
+              d="M-4,7q4,3,8,0"
+              fill="none"
+              stroke="#333"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
           )}
         </g>
       </svg>
@@ -469,56 +488,80 @@ const DraggableCharacter = ({ initialPos, onButtonActivate }) => {
 /* --- TitleLetter Component ---
    - 개별 타이틀 글자를 렌더링하며, 캐릭터와 충돌 시 아래로 이동합니다.
 */
-const TitleLetter = React.forwardRef(({ children, color }, ref) => {
-  const [isPressed, setIsPressed] = useState(false);
-  const innerRef = useRef(null);
-  const letterRef = ref || innerRef;
+interface TitleLetterProps {
+  children: React.ReactNode;
+  color: string;
+}
 
-  useEffect(() => {
-    const checkCollision = (charRect) => {
-      if (letterRef.current) {
-        const letterRect = letterRef.current.getBoundingClientRect();
-        setIsPressed(
-          !(
-            charRect.right < letterRect.left ||
-            charRect.left > letterRect.right ||
-            charRect.bottom < letterRect.top ||
-            charRect.top > letterRect.bottom
-          )
-        );
-      }
-    };
-    const handleCharacterMove = (e) => {
-      if (e.detail.charRect) checkCollision(e.detail.charRect);
-    };
-    window.addEventListener("characterMove", handleCharacterMove);
-    return () =>
-      window.removeEventListener("characterMove", handleCharacterMove);
-  }, [letterRef]);
+const TitleLetter = React.forwardRef<HTMLSpanElement, TitleLetterProps>(
+  ({ children, color }, ref) => {
+    const [isPressed, setIsPressed] = useState<boolean>(false);
+    const innerRef = useRef<HTMLSpanElement>(null);
+    const letterRef = (ref as React.RefObject<HTMLSpanElement>) || innerRef;
+    const colorClasses = {
+      cyan: 'text-cyan-400',
+      yellow: 'text-yellow-400',
+      purple: 'text-purple-400',
+      green: 'text-green-400',
+      red: 'text-red-400',
+      blue: 'text-blue-400'
+    } as const;
+    
+    useEffect(() => {
+      const checkCollision = (charRect: DOMRect) => {
+        if (letterRef.current) {
+          const letterRect = letterRef.current.getBoundingClientRect();
+          setIsPressed(
+            !(
+              charRect.right < letterRect.left ||
+              charRect.left > letterRect.right ||
+              charRect.bottom < letterRect.top ||
+              charRect.top > letterRect.bottom
+            )
+          );
+        }
+      };
+      const handleCharacterMove = (e: Event) => {
+        const customEvent = e as CustomEvent<{ charRect: DOMRect }>;
+        if (customEvent.detail.charRect) checkCollision(customEvent.detail.charRect);
+      };
+      window.addEventListener("characterMove", handleCharacterMove);
+      return () => window.removeEventListener("characterMove", handleCharacterMove);
+    }, [letterRef]);
 
-  return (
-    <span
-      ref={letterRef}
-      className={`obstacle text-${color}-400 transition-all duration-300 text-6xl relative leading-none inline-block ${
-        isPressed ? "transform translate-y-2" : ""
-      }`}
-    >
-      {children}
-    </span>
-  );
-});
+    return (
+      <span
+        ref={letterRef}
+        className={`
+  obstacle 
+  ${colorClasses[color as keyof typeof colorClasses]} 
+  transition-all 
+  duration-300 
+  text-6xl 
+  relative 
+  leading-none 
+  inline-block
+  opacity-100
+  ${isPressed ? "transform translate-y-2" : ""}
+`}
+      >
+        {children}
+      </span>
+    );
+  }
+);
 
 /* --- SoundControl Component ---
    - 우측 하단에 사운드 토글 버튼을 렌더링합니다.
 */
-const SoundControl = () => {
-  const [isMuted, setIsMuted] = useState(false);
+const SoundControl: React.FC = () => {
+  const [isMuted, setIsMuted] = useState<boolean>(false);
   const toggleSound = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    Object.values(SOUNDS).forEach(
-      (sound) => (sound.muted = newMuted)
-    );
+    Object.values(SOUNDS).forEach((sound) => {
+      sound.muted = newMuted;
+    });
   };
   return (
     <button
@@ -531,10 +574,9 @@ const SoundControl = () => {
 };
 
 /* --- PatternPreview Component ---
-   - 피드백을 반영하여, 게임에서 만들 수 있는 간단한 패턴(물고기, 새 모양)을
-     타이틀 화면에 반투명하게 떠다니도록 추가합니다.
+   - 게임에서 만들 수 있는 간단한 패턴(물고기, 새 모양)을 타이틀 화면에 반투명하게 떠다니도록 추가합니다.
 */
-const PatternPreview = () => {
+const PatternPreview: React.FC = () => {
   return (
     <div className="absolute inset-0 pointer-events-none">
       <div className="relative w-full h-full">
@@ -570,14 +612,16 @@ const PatternPreview = () => {
 /* --- SevenDropsTitle Component ---
    - 메인 컴포넌트: 배경 Tangram 조각, 타이틀, 메뉴 버튼, 캐릭터, 사운드 컨트롤, 그리고 패턴 프리뷰를 렌더링합니다.
 */
-const SevenDropsTitle = () => {
-  const [hoveredButton, setHoveredButton] = useState(null);
-  const [characterInitialPos, setCharacterInitialPos] = useState(null);
-  const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
-  const letterSRef = useRef(null);
+const SevenDropsTitle: React.FC = () => {
+  const [hoveredButton, setHoveredButton] = useState<number | null>(null);
+  const [characterInitialPos, setCharacterInitialPos] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [parallaxOffset, setParallaxOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const letterSRef = useRef<HTMLSpanElement>(null);
 
   // Tangram 조각 정보 (그라데이션 효과 추가)
-  const tangramPieces = [
+  const tangramPieces: { color: string; style: React.CSSProperties }[] = [
     {
       color: "bg-cyan-500",
       style: {
@@ -655,13 +699,16 @@ const SevenDropsTitle = () => {
     document.addEventListener("click", playBgm, { once: true });
   }, []);
 
-  const handleButtonActivate = (btn) => {
+  const handleButtonActivate = (btn: string) => {
     console.log("Button activated:", btn);
   };
 
-  // 메뉴 버튼 스타일: RGBA를 사용하여 반투명 효과 적용
-  const getButtonStyle = (color, isHovered) => {
-    const colors = {
+  // 메뉴 버튼 스타일
+  const getButtonStyle = (color: string, isHovered: boolean): React.CSSProperties => {
+    const colors: Record<
+      string,
+      { background: string; hover: string; border: string }
+    > = {
       cyan: {
         background: "rgba(6, 182, 212, 0.70)",
         hover: "rgba(6, 182, 212, 0.90)",
@@ -679,14 +726,17 @@ const SevenDropsTitle = () => {
       },
     };
     return {
-      backgroundColor: isHovered
-        ? colors[color].hover
-        : colors[color].background,
+      backgroundColor: isHovered ? colors[color].hover : colors[color].background,
       borderColor: colors[color].border,
     };
   };
 
-  const menuButtons = [
+  const menuButtons: {
+    icon: React.ComponentType<{ size: number }>;
+    text: string;
+    color: string;
+    onClick: () => void;
+  }[] = [
     {
       icon: Play,
       text: "게임 시작",
@@ -726,9 +776,9 @@ const SevenDropsTitle = () => {
         .tangram:hover { opacity: 0.9; transition: opacity 0.3s ease; }
       `}</style>
       <div className="h-screen w-full bg-gray-900 flex flex-col items-center justify-center relative overflow-hidden">
-        {/* 패턴 프리뷰 요소 추가 */}
+        {/* 패턴 프리뷰 요소 */}
         <PatternPreview />
-        {/* 떠다니는 Tangram 조각 (그라데이션 효과 추가) */}
+        {/* 떠다니는 Tangram 조각 (그라데이션 효과 포함) */}
         {tangramPieces.map((piece, index) => (
           <div
             key={index}
@@ -742,13 +792,14 @@ const SevenDropsTitle = () => {
               "--translateY": `${parallaxOffset.y}px`,
               backgroundImage:
                 "linear-gradient(45deg, rgba(255,255,255,0.1), rgba(0,0,0,0.1))",
-            }}
+            } as React.CSSProperties}
           />
         ))}
 
         {/* 타이틀 */}
         <div className="relative mb-16">
-          <h1 className="font-bold mb-12 tracking-widest flex items-center justify-center gap-1">
+          {/* h1에 z-index 적용하여 오버레이보다 위로 */}
+          <h1 className="font-bold mb-12 tracking-widest flex items-center justify-center gap-1 relative z-10">
             <TitleLetter color="cyan">7</TitleLetter>
             <TitleLetter color="yellow">D</TitleLetter>
             <TitleLetter color="purple">R</TitleLetter>
@@ -758,7 +809,7 @@ const SevenDropsTitle = () => {
               S
             </TitleLetter>
           </h1>
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 via-purple-500 to-blue-500 rounded-1g blur opacity-10" />
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 via-purple-500 to-blue-500 rounded-lg blur opacity-10" />
         </div>
 
         {/* 메뉴 버튼 */}
